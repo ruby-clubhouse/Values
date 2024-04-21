@@ -60,12 +60,15 @@ class Value
       const_set :VALUE_ATTRS, fields
 
       def self.with(hash)
-        unexpected_fields = hash.keys - self::VALUE_ATTRS
-        missing_fields = self::VALUE_ATTRS - hash.keys
+        num_recognized_keys = self::VALUE_ATTRS.count { |field| hash.key?(field) }
 
-        if unexpected_fields.any?
+        if num_recognized_keys != hash.size
+          unexpected_fields = hash.keys - self::VALUE_ATTRS
+          missing_fields = self::VALUE_ATTRS - hash.keys
           raise Values::FieldError.new("Unexpected hash keys: #{unexpected_fields}", missing_fields:, unexpected_fields:)
-        elsif missing_fields.any?
+        elsif num_recognized_keys != self::VALUE_ATTRS.size
+          unexpected_fields = hash.keys - self::VALUE_ATTRS
+          missing_fields = self::VALUE_ATTRS - hash.keys
           raise Values::FieldError.new("Missing hash keys: #{missing_fields} (got keys #{hash.keys})", missing_fields:, unexpected_fields:)
         end
 
@@ -104,9 +107,22 @@ class Value
         end
       end
 
+      # Optimized to avoid intermediate Hash instantiations.
       def with(hash = {})
         return self if hash.empty?
-        self.class.with(to_h.merge(hash))
+
+        num_recognized_keys = self.class::VALUE_ATTRS.count { |field| hash.key?(field) }
+
+        if num_recognized_keys != hash.size
+          unexpected_fields = hash.keys - self.class::VALUE_ATTRS
+          raise Values::FieldError.new("Unexpected hash keys: #{unexpected_fields}", unexpected_fields:)
+        end
+
+        args = self.class::VALUE_ATTRS.map do |field|
+          hash.key?(field) ? hash[field] : send(field)
+        end
+
+        self.class.new(*args)
       end
 
       def to_h
